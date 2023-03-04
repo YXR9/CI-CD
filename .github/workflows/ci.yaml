@@ -1,39 +1,58 @@
-name: GitHub Actions Demo
-on: 
+# GitHub CI build pipeline
+name: Awesome Calculator CI build
+
+on:
   push:
     branches:
-      - "main"
-  pull_request:
-    branches: ["main"]
+      - master
+      - main
 
 jobs:
-  Explore-GitHub-Actions:
+  run-and-test:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "? The job was automatically triggered by a ${{ github.event_name }} event."
-      - run: echo "? This job is now running on a ${{ runner.os }} server hosted by GitHub!"
-      - run: echo "? The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
-      - name: Check out repository code
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+      - name: Set up python 3.7
+        uses: actions/setup-python@v2
         with:
-            fetch-depth: 0
-      - run: echo "? The ${{ github.repository }} repository has been cloned to the runner."
-      - run: echo "?️ The workflow is now ready to test your code on the runner."
-      - name: List files in the repository
+          python-version: 3.7
+      - name: Install dependencies
         run: |
-          ls ${{ github.workspace }}
-      - run: echo "? This job's status is ${{ job.status }}."
-  CI:
-    runs-on: ubuntu-latest
-    needs: [Explore-GitHub-Actions]
-    strategy:
-      matrix:
-        node-version: [10.x, 12.x, 14.x, 15.x, 16.x, 18.x]
-    steps:
-      - uses: actions/checkout@v3
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+          cd src
+          python -m pip install --upgrade pip
+          pip install coverage
+          if  [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Run Unit Tests and generate coverage report
+        run: |
+          cd src
+          python -m unittest -v
+          coverage run -m unittest
+          coverage report
+          coverage html
+      - name: Archive code coverage html report
+        uses: actions/upload-artifact@v2
         with:
-          node-version: ${{ matrix.node-version }}
-      - run: npm install
-      - run: npm test
+          name: code-coverage-report
+          path: src/htmlcov
+
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v3
+        with:
+          push: true
+          tags: yangruu/cicd:latest
